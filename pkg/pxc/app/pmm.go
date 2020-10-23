@@ -6,7 +6,7 @@ import (
 	api "github.com/percona/percona-xtradb-cluster-operator/pkg/apis/pxc/v1"
 )
 
-func PMMClient(spec *api.PMMSpec, secrets string, v120OrGreater bool) corev1.Container {
+func PMMClient(spec *api.PMMSpec, secrets string, v120OrGreater bool, v170OrGreater bool) corev1.Container {
 	ports := []corev1.ContainerPort{{ContainerPort: 7777}}
 
 	for i := 30100; i <= 30105; i++ {
@@ -52,7 +52,93 @@ func PMMClient(spec *api.PMMSpec, secrets string, v120OrGreater bool) corev1.Con
 		container.Ports = ports
 	}
 
+	if v170OrGreater {
+		container.Env = append(container.Env, pmmAgentEnvs(spec.ServerHost, spec.ServerUser, secrets)...)
+	}
+
 	return container
+}
+
+func pmmAgentEnvs(pmmServerHost, pmmServerUser, secrets string) []corev1.EnvVar {
+	return []corev1.EnvVar{
+		{
+			Name: "POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			},
+		},
+		{
+			Name: "POD_NAMESPASE",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.namespace",
+				},
+			},
+		},
+		{
+			Name:  "PMM_AGENT_SERVER_ADDRESS",
+			Value: pmmServerHost,
+		},
+		{
+			Name:  "PMM_AGENT_SERVER_USERNAME",
+			Value: pmmServerUser,
+		},
+		{
+			Name: "PMM_AGENT_SERVER_PASSWORD",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: SecretKeySelector(secrets, "pmmserver"),
+			},
+		},
+		{
+			Name:  "PMM_AGENT_LISTEN_PORT",
+			Value: "7777",
+		},
+		{
+			Name:  "PMM_AGENT_PORTS_MIN",
+			Value: "30100",
+		},
+		{
+			Name:  "PMM_AGENT_PORTS_MAX",
+			Value: "30105",
+		},
+		{
+			Name:  "PMM_AGENT_CONFIG_FILE",
+			Value: "/usr/local/percona/pmm2/config/pmm-agent.yaml",
+		},
+		{
+			Name:  "PMM_AGENT_SETUP_NODE_NAME",
+			Value: "$(POD_NAMESPASE)-$(POD_NAME)",
+		},
+		{
+			Name:  "PMM_AGENT_SETUP",
+			Value: "1",
+		},
+		{
+			Name:  "PMM_AGENT_SETUP_FORCE",
+			Value: "1",
+		},
+		{
+			Name:  "PMM_AGENT_SERVER_INSECURE_TLS",
+			Value: "1",
+		},
+	}
+}
+
+func PMMAgentScript(dbType string) []corev1.EnvVar {
+	pmmServerArgs := " --skip-connection-check "
+	pmmServerArgs = pmmServerArgs + " --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(DB_CLUSTER) "
+	pmmServerArgs = pmmServerArgs + " --service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT) "
+	if dbType == "mysql" {
+		pmmServerArgs = pmmServerArgs + "$(DB_ARGS)"
+	}
+	return []corev1.EnvVar{
+		{
+			Name:  "PMM_AGENT_PRERUN_SCRIPT",
+			Value: "sleep 10; pmm-admin add $(DB_TYPE)" + pmmServerArgs + "; pmm-admin annotate reboot",
+		},
+	}
 }
 
 func pmmEnvServerUser(user, secrets string) []corev1.EnvVar {
