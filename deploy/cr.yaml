@@ -25,7 +25,7 @@ spec:
 #      group: cert-manager.io
   allowUnsafeConfigurations: false
 #  pause: false
-  updateStrategy: SmartUpdate
+  updateStrategy: RollingUpdate
   upgradeOptions:
     versionServiceEndpoint: https://check.percona.com
     apply: recommended
@@ -72,8 +72,8 @@ spec:
 #        memory: 1G
 #        cpu: "1"
 #        ephemeral-storage: 1Gi
-#    nodeSelector:
-#      disktype: ssd
+    nodeSelector:
+      mysql: true
     affinity:
       antiAffinityTopologyKey: "kubernetes.io/hostname"
 #      advanced:
@@ -104,11 +104,11 @@ spec:
 #        accessModes: [ "ReadWriteOnce" ]
         resources:
           requests:
-            storage: 6Gi
+            storage: 2Gi
     gracePeriod: 600
   haproxy:
     enabled: true
-    size: 3
+    size: 2
     image: percona/percona-xtradb-cluster-operator:1.6.0-haproxy
 #    imagePullPolicy: Always
 #    schedulerName: mycustom-scheduler
@@ -157,8 +157,8 @@ spec:
 #        memory: 1G
 #        cpu: 700m
 #    priorityClassName: high-priority
-#    nodeSelector:
-#      disktype: ssd
+    nodeSelector:
+      mysql: true
 #    sidecarResources:
 #      requests:
 #        memory: 1G
